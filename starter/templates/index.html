@@ -7,12 +7,36 @@
 </head>
 <body>
   <h1>Sudoku Game</h1>
+  <button id="dark-mode-toggle" style="position: absolute; top: 10px; right: 10px;">🌙 Dark Mode</button>
+  <div class="status-bar">
+    <div id="timer">Time: 0:00</div>
+  </div>
   <div id="sudoku-board"></div>
   <div class="controls">
+    <label for="difficulty">Difficulty:</label>
+    <select id="difficulty">
+      <option value="easy">Easy</option>
+      <option value="medium" selected>Medium</option>
+      <option value="hard">Hard</option>
+    </select>
     <button id="new-game">New Game</button>
+    <button id="hint">Hint</button>
     <button id="check-solution">Check Solution</button>
     <span id="message"></span>
   </div>
   <script src="/static/main.js"></script>
+  <div class="scoreboard" id="scoreboard" style="display: none;">
+    <h2>🏆 Top 10 Fastest Times</h2>
+    <div class="scoreboard-controls">
+      <label for="score-filter">Filter by difficulty:</label>
+      <select id="score-filter">
+        <option value="">All Difficulties</option>
+        <option value="easy">Easy</option>
+        <option value="medium">Medium</option>
+        <option value="hard">Hard</option>
+      </select>
+    </div>
+    <ol id="score-list"></ol>
+  </div>
 </body>
 </html>
