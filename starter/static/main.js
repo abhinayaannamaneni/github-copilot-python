@@ -6,6 +6,8 @@ let timerInterval = null;
 let elapsedSeconds = 0;
 let currentDifficulty = 'medium';
 let darkMode = localStorage.getItem('sudoku_dark_mode') === 'true';
+let hintsUsed = 0;
+let hintRequestInProgress = false;
 
 function formatTime(seconds) {
   const minutes = Math.floor(seconds / 60);
@@ -58,11 +60,11 @@ function getScores() {
   return scores ? JSON.parse(scores) : [];
 }
 
-function saveScore(playerName, time, difficulty) {
+function saveScore(playerName, time, difficulty, hintsUsed) {
   const scores = getScores();
-  scores.push({ playerName, time, difficulty, timestamp: new Date().getTime() });
+  scores.push({ playerName, time, difficulty, hintsUsed, timestamp: new Date().getTime() });
   scores.sort((a, b) => a.time - b.time);
-  localStorage.setItem('sudoku_scores', JSON.stringify(scores.slice(0, 100)));
+  localStorage.setItem('sudoku_scores', JSON.stringify(scores.slice(0, 10)));
   displayScoreboard();
 }
 
@@ -78,7 +80,8 @@ function displayScoreboard(filterDifficulty = '') {
   
   top10.forEach((score, index) => {
     const li = document.createElement('li');
-    li.innerText = `${score.playerName} - ${formatTime(score.time)} (${score.difficulty})`;
+    const hintsText = score.hintsUsed ? `, ${score.hintsUsed} ${score.hintsUsed === 1 ? 'hint' : 'hints'}` : ', no hints';
+    li.innerText = `${score.playerName} - ${formatTime(score.time)} (${score.difficulty}${hintsText})`;
     scoreList.appendChild(li);
   });
   
@@ -90,8 +93,54 @@ function displayScoreboard(filterDifficulty = '') {
 function promptForPlayerName() {
   const name = prompt('Enter your name for the scoreboard:');
   if (name && name.trim()) {
-    saveScore(name.trim(), elapsedSeconds, currentDifficulty);
+    saveScore(name.trim(), elapsedSeconds, currentDifficulty, hintsUsed);
   }
+}
+
+function hasConflict(row, col, value) {
+  if (!value) return false; // Empty cells have no conflict
+  
+  const boardDiv = document.getElementById('sudoku-board');
+  const inputs = boardDiv.getElementsByTagName('input');
+  
+  // Check row
+  for (let j = 0; j < SIZE; j++) {
+    if (j !== col) {
+      const idx = row * SIZE + j;
+      const cellValue = inputs[idx].value;
+      if (cellValue && parseInt(cellValue, 10) === parseInt(value, 10)) {
+        return true;
+      }
+    }
+  }
+  
+  // Check column
+  for (let i = 0; i < SIZE; i++) {
+    if (i !== row) {
+      const idx = i * SIZE + col;
+      const cellValue = inputs[idx].value;
+      if (cellValue && parseInt(cellValue, 10) === parseInt(value, 10)) {
+        return true;
+      }
+    }
+  }
+  
+  // Check 3x3 box
+  const startRow = row - row % 3;
+  const startCol = col - col % 3;
+  for (let i = startRow; i < startRow + 3; i++) {
+    for (let j = startCol; j < startCol + 3; j++) {
+      if (i !== row || j !== col) {
+        const idx = i * SIZE + j;
+        const cellValue = inputs[idx].value;
+        if (cellValue && parseInt(cellValue, 10) === parseInt(value, 10)) {
+          return true;
+        }
+      }
+    }
+  }
+  
+  return false;
 }
 
 function createBoardElement() {
@@ -110,6 +159,15 @@ function createBoardElement() {
       input.addEventListener('input', (e) => {
         const val = e.target.value.replace(/[^1-9]/g, '');
         e.target.value = val;
+        
+        // Check for conflicts and update UI accordingly
+        const row = parseInt(e.target.dataset.row, 10);
+        const col = parseInt(e.target.dataset.col, 10);
+        if (hasConflict(row, col, val)) {
+          e.target.classList.add('conflict');
+        } else {
+          e.target.classList.remove('conflict');
+        }
       });
       rowDiv.appendChild(input);
     }
@@ -142,6 +200,7 @@ function renderPuzzle(puz) {
 
 async function newGame() {
   stopTimer();
+  hintsUsed = 0;
   const difficultySelect = document.getElementById('difficulty');
   currentDifficulty = difficultySelect ? difficultySelect.value : 'medium';
   const res = await fetch(`/new?difficulty=${encodeURIComponent(currentDifficulty)}`);
@@ -152,6 +211,15 @@ async function newGame() {
 }
 
 async function getHint() {
+  // Prevent multiple simultaneous hint requests
+  if (hintRequestInProgress) {
+    return;
+  }
+  
+  hintRequestInProgress = true;
+  const hintBtn = document.getElementById('hint');
+  hintBtn.disabled = true;
+  
   const boardDiv = document.getElementById('sudoku-board');
   const inputs = boardDiv.getElementsByTagName('input');
   const board = [];
@@ -163,27 +231,37 @@ async function getHint() {
       board[i][j] = val ? parseInt(val, 10) : 0;
     }
   }
-  const res = await fetch('/hint', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({board})
-  });
-  const data = await res.json();
-  const msg = document.getElementById('message');
-  if (data.error) {
-    msg.style.color = '#d32f2f';
-    msg.innerText = data.error;
-    return;
+  
+  try {
+    const res = await fetch('/hint', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({board})
+    });
+    const data = await res.json();
+    const msg = document.getElementById('message');
+    
+    // Check HTTP status code - only process as success if 2xx
+    if (!res.ok) {
+      msg.style.color = '#d32f2f';
+      msg.innerText = data.error || 'Error requesting hint';
+      return;
+    }
+    
+    const { row, col, value } = data;
+    const idx = row * SIZE + col;
+    const inp = inputs[idx];
+    inp.value = value;
+    inp.disabled = true;
+    inp.className = 'sudoku-cell hint';
+    hintedCells.add(idx);
+    hintsUsed++;
+    msg.style.color = '#1976d2';
+    msg.innerText = 'Hint provided!';
+  } finally {
+    hintRequestInProgress = false;
+    hintBtn.disabled = false;
   }
-  const { row, col, value } = data;
-  const idx = row * SIZE + col;
-  const inp = inputs[idx];
-  inp.value = value;
-  inp.disabled = true;
-  inp.className = 'sudoku-cell hint';
-  hintedCells.add(idx);
-  msg.style.color = '#1976d2';
-  msg.innerText = 'Hint provided!';
 }
 
 async function checkSolution() {

@@ -112,6 +112,17 @@ h1 {
     color: #fff;
 }
 
+.sudoku-cell.conflict {
+    background: #fff9c4;
+    border: 2px solid #fbc02d;
+}
+
+.dark-mode .sudoku-cell.conflict {
+    background: #f57f17;
+    border: 2px solid #ffeb3b;
+    color: #fff;
+}
+
 .sudoku-cell:nth-child(3),
 .sudoku-cell:nth-child(6) {
     border-right: 3px solid #333;

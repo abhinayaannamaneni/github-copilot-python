@@ -23,7 +23,10 @@ def index():
 @app.route('/new')
 def new_game():
     difficulty = request.args.get('difficulty', 'medium').lower()
-    clues = DIFFICULTY_CLUES.get(difficulty, DIFFICULTY_CLUES['medium'])
+    # Normalize difficulty to ensure it's valid
+    if difficulty not in DIFFICULTY_CLUES:
+        difficulty = 'medium'
+    clues = DIFFICULTY_CLUES[difficulty]
     puzzle, solution = sudoku_logic.generate_puzzle(clues)
     CURRENT['puzzle'] = puzzle
     CURRENT['solution'] = solution
